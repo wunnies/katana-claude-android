@@ -1,0 +1,8 @@
+Port 2022
+ListenAddress 127.0.0.1
+HostKey /tmp/mock/login_hostkey
+AuthorizedKeysFile .ssh/authorized_keys
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+UsePAM no
+PidFile /tmp/mock/sshd_login.pid

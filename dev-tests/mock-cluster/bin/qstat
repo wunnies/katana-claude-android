@@ -1,0 +1,13 @@
+#!/bin/bash
+# fake PBS qstat: default table filtered to the caller's jobs, or -f full format
+me=$(whoami)
+if [ "$1" = "-f" ]; then
+  for d in /tmp/pbs/jobs/*/; do [ -f $d/id ] || continue
+    [ -n "$2" ] && [ "${2%%.*}" != "$(basename $d)" ] && continue
+    echo "Job Id: $(cat $d/id)"; echo "    Job_Name = $(cat $d/name)"; echo "    Job_Owner = $(cat $d/owner)@katana2"
+    echo "    job_state = $(cat $d/state)"; [ -f $d/exec_host ] && echo "    exec_host = $(cat $d/exec_host)"
+    echo "    comment = $(cat $d/comment)"; echo; done; exit 0; fi
+printf "%-17s %-16s %-17s %-8s %s %s\n" "Job id" "Name" "User" "Time Use" "S" "Queue"
+echo "----------------  ---------------- ----------------  -------- - -----"
+for d in /tmp/pbs/jobs/*/; do [ -f $d/id ] || continue; [ "$(cat $d/owner)" = "$me" ] || continue
+  printf "%-17s %-16s %-17s %8s %s %s\n" "$(basename $d).kman" "$(cat $d/name)" "$(cat $d/owner)" "00:00:00" "$(cat $d/state)" "normal"; done

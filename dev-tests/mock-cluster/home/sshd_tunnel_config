@@ -1,0 +1,6 @@
+AuthorizedKeysFile .ssh/authorized_keys
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+PidFile none
+StrictModes no

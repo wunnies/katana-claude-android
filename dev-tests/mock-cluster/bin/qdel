@@ -1,0 +1,3 @@
+#!/bin/bash
+for j in "$@"; do d=/tmp/pbs/jobs/${j%%.*}; [ -d $d ] || { echo "qdel: Unknown Job Id $j" >&2; continue; }
+  [ -f $d/pid ] && pkill -TERM -s $(ps -o sid= -p $(cat $d/pid) 2>/dev/null | tr -d ' ') 2>/dev/null; rm -rf $d; done

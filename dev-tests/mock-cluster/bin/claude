@@ -1,0 +1,4 @@
+#!/bin/bash
+echo "FAKE-CLAUDE started with args: $*  TERM=$TERM  size=$(stty size)"
+echo "Resume a conversation:  > 1. katana analysis   2. paper draft"
+while IFS= read -r -s -n1 c; do printf 'KEY[%q]\n' "$c"; done
