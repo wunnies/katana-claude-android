@@ -144,17 +144,20 @@ class MainActivity : Activity(), TunnelManager.Listener {
             TunnelManager.disconnect()
             return
         }
-        if (!SshKeys.hasKey(this)) {
-            AlertDialog.Builder(this)
-                .setTitle("SSH key needed")
-                .setMessage("Generate (or import) an SSH key and add its public key to ~/.ssh/authorized_keys on katana first.")
-                .setPositiveButton("Open settings") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java)) }
-                .setNegativeButton("Cancel", null)
-                .show()
-            return
-        }
+        if (!ensureKey()) return
         show(false)
         TunnelManager.start(this)
+    }
+
+    private fun ensureKey(): Boolean {
+        if (SshKeys.hasKey(this)) return true
+        AlertDialog.Builder(this)
+            .setTitle("SSH key needed")
+            .setMessage("Generate (or import) an SSH key and add its public key to ~/.ssh/authorized_keys on katana first.")
+            .setPositiveButton("Open settings") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java)) }
+            .setNegativeButton("Cancel", null)
+            .show()
+        return false
     }
 
     private fun showMenu(anchor: View) {
@@ -165,6 +168,7 @@ class MainActivity : Activity(), TunnelManager.Listener {
         m.menu.add(0, 4, 0, if (composeShown) "Hide compose box" else "Show compose box")
         m.menu.add(0, 5, 0, "Copy terminal text")
         m.menu.add(0, 6, 0, "Copy log")
+        m.menu.add(0, 9, 0, "Restart job (qdel + new job)…")
         m.menu.add(0, 7, 0, "End job (qdel)…")
         m.menu.add(0, 8, 0, "Disconnect (job keeps running)")
         m.setOnMenuItemClickListener { item ->
@@ -188,6 +192,12 @@ class MainActivity : Activity(), TunnelManager.Listener {
                     .setNegativeButton("Cancel", null)
                     .show()
                 8 -> TunnelManager.disconnect()
+                9 -> if (ensureKey()) AlertDialog.Builder(this)
+                    .setTitle("Restart the PBS job?")
+                    .setMessage("This ends the current ${prefs.jobName} job with qdel, which stops tmux and claude in it. Then it submits a new job, waits for it to start, and connects.")
+                    .setPositiveButton("Restart") { _, _ -> show(false); TunnelManager.restartJob(this) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
             }
             true
         }
@@ -303,7 +313,8 @@ First-time setup:
  3. Connect your phone to the UNSW VPN.
 
 Then press Start. The app will:
- • ssh to katana and qsub j3-tunnel-96gb.sh (or reuse a tunnel-sshd job that's already queued or running)
+ • ssh to katana and qsub j3-tunnel-96gb.sh (or reuse a tunnel-sshd job that's already queued or running;
+   ⋮ → Restart job ends it and submits a fresh one)
  • poll qstat until the job is R (usually a few minutes)
  • ssh katana-job through ~/resolve_node.sh
  • run 'claude --resume' inside tmux

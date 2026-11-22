@@ -182,7 +182,7 @@ fun main() {
 
     println("8. qdel ends the job (and tmux/claude with it)")
     Ssh.exec(login2, Pbs.bashLc("qdel ${Pbs.shq(Pbs.shortId(id!!))}"))
-    Thread.sleep(1500)
+    Thread.sleep(6000)   // a running job sits in E (exiting) briefly
     val after = Pbs.parseQstat(Ssh.exec(login2, Pbs.bashLc("qstat")).out, "tunnel-sshd")
     check("job gone after qdel", after.isEmpty(), after.toString())
     login2.disconnect()

@@ -1,3 +1,9 @@
 #!/bin/bash
+# fake qdel: queued jobs vanish at once; running jobs go to E (exiting) for ~4 s, like PBS
 for j in "$@"; do d=/tmp/pbs/jobs/${j%%.*}; [ -d $d ] || { echo "qdel: Unknown Job Id $j" >&2; continue; }
-  [ -f $d/pid ] && pkill -TERM -s $(ps -o sid= -p $(cat $d/pid) 2>/dev/null | tr -d ' ') 2>/dev/null; rm -rf $d; done
+  if [ "$(cat $d/state)" = R ]; then
+    echo E > $d/state
+    [ -f $d/pid ] && kill -TERM -- -$(cat $d/pid) 2>/dev/null   # whole job process group, like PBS
+    ( sleep 4; rm -rf $d ) >/dev/null 2>&1 & disown
+  else [ -f $d/pid ] && kill -TERM -- -$(cat $d/pid) 2>/dev/null; rm -rf $d; fi
+done

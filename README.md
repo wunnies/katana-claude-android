@@ -50,7 +50,7 @@ The tunnel sshd in the job uses `~/.ssh/sshd_tunnel_config`. If that file sets i
 - **Picking a conversation without arrow keys:** the key bar above the keyboard has **↑ ↓ ← →** (hold to repeat), **⏎**, **Esc**, **Tab**, **⇧Tab** (Claude's mode toggle), **Ctrl** (sticky: tap it, then a letter), **^C**, **PgUp/PgDn**, **Home/End**, **/** and **⌫**.
 - **Typing prompts:** tap the terminal for direct keyboard input, or use the box at the bottom with autocorrect and multi-line text. **Send** pastes it (as a bracketed paste, so newlines stay newlines) and presses Enter.
 - **Scrolling:** swipe on the terminal. With tmux mouse mode (on by default), swiping back enters tmux copy mode, and scrolling to the bottom or pressing `q` returns.
-- **⋮ menu:** font size, show/hide the compose box, copy terminal text, copy log, **End job (qdel)**, Disconnect.
+- **⋮ menu:** font size, show/hide the compose box, copy terminal text, copy log, **Restart job** (qdel the tunnel job, wait until it has left qstat, submit a new one and connect), **End job (qdel)**, Disconnect.
 - **Stop / Disconnect** only closes SSH. The PBS job, tmux and claude keep running until walltime (8 h) or **End job**.
 
 ## Settings (defaults match your setup)

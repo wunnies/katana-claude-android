@@ -11,8 +11,7 @@ abs=$(cd "$(dirname "$script")" && pwd)/$(basename "$script")
 ( sleep ${FAKE_QUEUE_SECS:-8}
   [ -d $d ] || exit 0
   echo R > $d/state; echo "localhost/0" > $d/exec_host; echo "Job run at $(date) on (localhost:ncpus=1:mem=100663296kb)" > $d/comment
-  cd ~ && PBS_JOBID=$id setsid bash "$abs" > ~/"$name.o$n" 2> ~/"$name.e$n" & echo $! > $d/pid
-  wait
-  rm -rf $d ) >/dev/null 2>&1 &
+  cd ~ && PBS_JOBID=$id setsid bash -c 'echo $$ > "$0"; exec bash "$1"' "$d/pid" "$abs" > ~/"$name.o$n" 2> ~/"$name.e$n"
+  [ "$(cat $d/state 2>/dev/null)" = E ] || rm -rf $d ) >/dev/null 2>&1 &
 disown
 echo "$id"

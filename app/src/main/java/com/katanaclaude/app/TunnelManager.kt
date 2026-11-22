@@ -30,6 +30,7 @@ object TunnelManager {
     enum class State(val label: String, val active: Boolean) {
         IDLE("Idle", false),
         CONNECTING("Connecting to katana", true),
+        ENDING("Ending old job", true),
         SUBMITTING("Submitting job", true),
         WAITING("Waiting for job", true),
         TUNNELLING("Tunnelling to job", true),
@@ -67,7 +68,7 @@ object TunnelManager {
     private lateinit var app: Context
 
     /** One press of Start. Each run owns its sessions, so a stale run can never touch a newer one. */
-    private class Run {
+    private class Run(@Volatile var freshJob: Boolean) {
         @Volatile var stopped = false
         @Volatile var thread: Thread? = null
         @Volatile var login: Session? = null
@@ -123,8 +124,11 @@ object TunnelManager {
 
     fun isRunning(): Boolean = run?.let { !it.stopped && it.thread?.isAlive == true } ?: false
 
-    /** The one button: does the whole flow, reusing a job and tmux session if they exist. */
-    fun start(ctx: Context) {
+    /**
+     * The one button: does the whole flow, reusing a job and tmux session if they exist.
+     * With [freshJob], it first ends any existing tunnel job (qdel), waits for it to leave qstat, then submits a new one.
+     */
+    fun start(ctx: Context, freshJob: Boolean = false) {
         init(ctx)
         synchronized(this) {
             if (isRunning()) {
@@ -132,7 +136,7 @@ object TunnelManager {
                 return
             }
             Prefs(app).wantConnected = true
-            val r = Run()
+            val r = Run(freshJob)
             run = r
             r.thread = thread(name = "tunnel-worker") { workerMain(r) }
         }
@@ -156,7 +160,6 @@ object TunnelManager {
     /** Disconnects, then runs qdel on the tunnel job(s), which ends tmux and claude too. */
     fun endJob(ctx: Context) {
         init(ctx)
-        val known = jobId
         disconnect("Disconnecting to end the job…")
         thread(name = "qdel") {
             val p = Prefs(app)
@@ -164,14 +167,7 @@ object TunnelManager {
             try {
                 log("▶ ssh ${p.user}@${p.host} to run qdel")
                 s = openLogin(p)
-                val jobs = Pbs.parseQstat(exec(s, Pbs.bashLc("qstat")).out, p.jobName).filter { it.state in Pbs.ALIVE }
-                val ids = (jobs.map { it.id } + listOfNotNull(known)).map { Pbs.shortId(it) }.distinct()
-                if (ids.isEmpty()) {
-                    log("No ${p.jobName} job found, so there's nothing to end.")
-                } else {
-                    val r = exec(s, Pbs.bashLc("qdel " + ids.joinToString(" ") { Pbs.shq(it) }))
-                    log(if (r.code == 0) "✔ qdel ${ids.joinToString(" ")}" else "qdel exit ${r.code}: ${r.err.trim()} ${r.out.trim()}")
-                }
+                JobOps.endJobs(s, p.jobName, waitUntilGone = false, log = { log(it) }, sleep = { Thread.sleep(it) })
                 jobId = null
             } catch (e: Exception) {
                 log("❌ qdel failed: ${describe(e)}")
@@ -179,6 +175,14 @@ object TunnelManager {
                 s?.disconnect()
             }
         }
+    }
+
+    /** Ends the current tunnel job (and tmux/claude in it), then submits a new one and connects. */
+    fun restartJob(ctx: Context) {
+        init(ctx)
+        if (isRunning()) disconnect("Disconnecting to restart the job…")
+        log("Restarting: the old ${Prefs(app).jobName} job will be ended and a new one submitted.")
+        start(ctx, freshJob = true)
     }
 
     fun sendInput(bytes: ByteArray) {
@@ -299,6 +303,15 @@ object TunnelManager {
         r.login = l
         log("✔ Logged in to katana (${l.serverVersion})")
         checkStop(r)
+
+        // Restart: end the old job first (once; reconnect attempts after this reuse the new job).
+        if (r.freshJob) {
+            setState(State.ENDING, "qdel ${p.jobName}")
+            JobOps.endJobs(l, p.jobName, waitUntilGone = true, log = { log(it) }, sleep = { sleepOrStop(r, it) })
+            jobId = null
+            r.freshJob = false
+            checkStop(r)
+        }
 
         // Reuse a tunnel-sshd job that is already queued or running, so there's never a duplicate.
         log("▶ qstat (looking for an existing ${p.jobName} job)")
