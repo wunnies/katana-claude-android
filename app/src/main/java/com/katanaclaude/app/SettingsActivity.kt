@@ -33,6 +33,7 @@ class SettingsActivity : Activity() {
     private lateinit var jobName: EditText
     private lateinit var proxy: EditText
     private lateinit var command: EditText
+    private lateinit var startDir: EditText
     private lateinit var poll: EditText
     private lateinit var tmux: CheckBox
     private lateinit var tmuxSession: EditText
@@ -92,6 +93,8 @@ class SettingsActivity : Activity() {
         note("If this file isn't found, j3-tunnel-96gb.sh and j3-sshtunnel-96gb.sh are tried as well.")
         jobName = field("PBS job name (#PBS -N)", prefs.jobName)
         proxy = field("ProxyCommand run on katana (Host katana-job)", prefs.proxyCommand)
+        startDir = field("Start directory on the job node (cd before claude)", prefs.startDir)
+        note("Applies when a new tmux session is created. An existing session keeps its directory; exit it, or End job, to start fresh.")
         command = field("Command to run on the job node", prefs.claudeCommand)
         poll = field("qstat poll interval (seconds)", prefs.pollSeconds.toString(), InputType.TYPE_CLASS_NUMBER)
         tmux = check("Run inside tmux (claude survives disconnects; Start re-attaches)", prefs.useTmux)
@@ -327,6 +330,7 @@ class SettingsActivity : Activity() {
         prefs.jobName = jobName.text.toString()
         prefs.proxyCommand = proxy.text.toString()
         prefs.claudeCommand = command.text.toString()
+        prefs.startDir = startDir.text.toString()
         prefs.pollSeconds = poll.text.toString().toIntOrNull() ?: 10
         prefs.useTmux = tmux.isChecked
         prefs.tmuxSession = tmuxSession.text.toString()

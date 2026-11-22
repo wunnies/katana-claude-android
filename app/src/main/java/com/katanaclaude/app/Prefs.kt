@@ -31,6 +31,9 @@ class Prefs(ctx: Context) {
     /** The ProxyCommand that runs on katana and pipes to the job's sshd. */
     var proxyCommand: String
         get() = str("proxyCommand", "~/resolve_node.sh"); set(v) = putStr("proxyCommand", v)
+    /** Directory to cd into on the job node before starting claude (empty = home). */
+    var startDir: String
+        get() = sp.getString("startDir", "/srv/scratch/wonglab/wunna")?.trim() ?: ""; set(v) = putStr("startDir", v)
     var claudeCommand: String
         get() = str("claudeCommand", "claude --resume"); set(v) = putStr("claudeCommand", v)
 

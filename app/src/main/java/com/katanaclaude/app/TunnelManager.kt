@@ -366,7 +366,7 @@ object TunnelManager {
         val ch = Ssh.connectChannel<ChannelExec>(js, "exec", "the terminal on the job node") {
             it.setPty(true)
             it.setPtyType("xterm-256color", cols, rows, 0, 0)
-            it.setCommand(Pbs.remoteCommand(Pbs.launchScript(p.claudeCommand, p.useTmux, p.tmuxSession, p.tmuxMouse)))
+            it.setCommand(Pbs.remoteCommand(Pbs.launchScript(p.claudeCommand, p.useTmux, p.tmuxSession, p.tmuxMouse, p.startDir)))
             stream = it.inputStream
         }
         val input = stream!!
@@ -375,6 +375,7 @@ object TunnelManager {
         ring.clear()
         main.post { listeners.forEach { it.onTerminalReset() } }
         onConnected()
+        if (p.startDir.isNotBlank()) log("  cd ${p.startDir}")
         log(if (p.useTmux) "✔ Running '${p.claudeCommand}' in tmux session '${p.tmuxSession}' (re-attached if it already existed)" else "✔ Running '${p.claudeCommand}'")
         setState(State.CONNECTED, "katana-job${jobNode?.let { " · $it" } ?: ""}")
 

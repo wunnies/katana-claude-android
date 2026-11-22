@@ -50,7 +50,7 @@ fun openTerm(js: com.jcraft.jsch.Session): Shell {
     val ch = js.openChannel("exec") as ChannelExec
     ch.setPty(true)
     ch.setPtyType("xterm-256color", 90, 30, 0, 0)
-    ch.setCommand(Pbs.remoteCommand(Pbs.launchScript("/usr/local/bin/claude --resume", true, "claude", true)))
+    ch.setCommand(Pbs.remoteCommand(Pbs.launchScript("/usr/local/bin/claude --resume", true, "claude", true, "/srv/scratch/wonglab/wunna")))
     val sh = Shell(ch)
     ch.connect(30000)
     return sh
@@ -134,6 +134,8 @@ fun main() {
     val okStart = sh.waitFor("FAKE-CLAUDE started with args: --resume")
     if (!okStart) println("----- FULL SHELL OUTPUT -----\n" + sh.out.toString().replace("\u001b", "<ESC>") + "\n-----")
     check("claude started inside tmux", okStart)
+    val cwd = Ssh.exec(login, Pbs.bashLc("tmux display -p -t claude '#{pane_current_path}'")).out.trim()
+    check("claude started in /srv/scratch/wonglab/wunna", cwd == "/srv/scratch/wonglab/wunna", cwd)
     val inTmux = sh.waitFor("TERM=tmux") || sh.waitFor("TERM=screen")
     check("TERM inside tmux", inTmux)
     sh.send("\u001b[B")    // down arrow (normal cursor mode)

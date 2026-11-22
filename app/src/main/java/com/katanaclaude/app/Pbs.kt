@@ -85,13 +85,16 @@ object Pbs {
      * keeps running if the phone drops off, and the next connection re-attaches (-A) to the same session.
      * When claude exits you're left at a shell, still inside tmux.
      */
-    fun launchScript(claudeCmd: String, useTmux: Boolean, session: String, mouse: Boolean): String {
+    fun launchScript(claudeCmd: String, useTmux: Boolean, session: String, mouse: Boolean, startDir: String = ""): String {
         val shellAfter = "exec \"\${SHELL:-bash}\" -l"
-        if (!useTmux) return "$claudeCmd; $shellAfter"
+        // cd first: a new tmux session starts in the current directory, and claude --resume lists that folder's conversations.
+        val cd = if (startDir.isBlank()) "" else
+            "cd ${shq(startDir)} 2>/dev/null || echo \"warning: couldn't cd to \"${shq(startDir)}\", staying in \$PWD\"; "
+        if (!useTmux) return "$cd$claudeCmd; $shellAfter"
         val inner = shq("$claudeCmd; $shellAfter")
         val s = shq(session)
         val mouseOpt = if (mouse) " \\; set-option -g mouse on" else ""
-        return "if command -v tmux >/dev/null 2>&1; then exec tmux new-session -A -s $s $inner$mouseOpt; " +
+        return cd + "if command -v tmux >/dev/null 2>&1; then exec tmux new-session -A -s $s $inner$mouseOpt; " +
             "elif command -v screen >/dev/null 2>&1; then exec screen -D -R -S $s sh -c $inner; " +
             "else echo 'tmux/screen not found: claude will stop if the connection drops'; $claudeCmd; $shellAfter; fi"
     }

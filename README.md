@@ -6,7 +6,7 @@ One button on your phone does all of this:
 2. `qsub j3-tunnel-96gb.sh`, or reuses a `tunnel-sshd` job that's already queued or running, so you never get a duplicate
 3. polls `qstat` until the job is `R`, showing a live log the whole time (usually a few minutes)
 4. leaves the katana shell and runs `ssh katana-job` through `ProxyCommand ssh katana "~/resolve_node.sh"`
-5. runs `claude --resume` inside **tmux** on the job node, in a full terminal
+5. `cd /srv/scratch/wonglab/wunna`, then runs `claude --resume` inside **tmux** on the job node, in a full terminal
 
 Leaving the app (or swiping it away) doesn't drop the session: a foreground service holds the
 SSH connection, shown by a notification with a **Disconnect** button. Even if the phone loses
@@ -61,6 +61,7 @@ The tunnel sshd in the job uses `~/.ssh/sshd_tunnel_config`. If that file sets i
 | Job script (in `~`) | `j3-tunnel-96gb.sh`, falling back to `j3-sshtunnel-96gb.sh` if not found |
 | PBS job name | `tunnel-sshd` |
 | ProxyCommand on katana | `~/resolve_node.sh` |
+| Start directory on the node | `/srv/scratch/wonglab/wunna` (cd before tmux/claude) |
 | Command on the node | `claude --resume` |
 | tmux session | `claude` (mouse mode on) |
 | qstat poll interval | 10 s |
