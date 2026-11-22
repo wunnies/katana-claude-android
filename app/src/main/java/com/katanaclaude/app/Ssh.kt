@@ -1,6 +1,8 @@
 package com.katanaclaude.app
 
+import com.jcraft.jsch.Channel
 import com.jcraft.jsch.ChannelExec
+import com.jcraft.jsch.JSchException
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Proxy
 import com.jcraft.jsch.Session
@@ -17,6 +19,68 @@ import java.net.Socket
 object Ssh {
 
     data class ExecResult(val code: Int, val out: String, val err: String)
+
+    /** How long to wait for the server to confirm a new channel. OpenSSH's own client waits forever. */
+    const val CHANNEL_TIMEOUT_MS = 120_000
+
+    /** Optional progress logger for slow channel opens (set by the app). */
+    @Volatile var slowLog: ((String) -> Unit)? = null
+
+    /** A channel (exec/proxy/terminal) the server refused or never confirmed, with the step and the reason. */
+    class ChannelOpenException(msg: String) : IOException(msg)
+
+    private fun reasonName(code: Int) = when (code) {
+        1 -> "administratively prohibited"
+        2 -> "connect failed"
+        3 -> "unknown channel type"
+        4 -> "resource shortage, e.g. too many sessions"
+        else -> "reason code $code"
+    }
+
+    /**
+     * Opens and connects a channel, retrying up to 3 times. JSch only says "channel is not opened",
+     * so this reports which step it was and whether the server refused (with its reason code) or never answered.
+     * [prepare] runs on each fresh channel before connect (set the command, grab streams).
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Channel> connectChannel(
+        s: Session, type: String, what: String, timeoutMs: Int = CHANNEL_TIMEOUT_MS,
+        attempts: Int = 2, prepare: (T) -> Unit,
+    ): T {
+        var last = ""
+        for (attempt in 1..attempts) {
+            if (!s.isConnected) throw IOException("SSH connection closed before $what")
+            val ch = s.openChannel(type) as T
+            prepare(ch)
+            // HPC login nodes can take a long time to set up a session (PAM, home mounts, quota/MOTD
+            // scripts), and OpenSSH's client simply waits. Log while waiting so it's clear what's happening.
+            val watcher = slowLog?.let { log ->
+                kotlin.concurrent.thread(isDaemon = true, name = "channel-wait") {
+                    try {
+                        var t = 0
+                        while (true) {
+                            Thread.sleep(10_000); t += 10
+                            log("  …waiting for the server to open $what (${t}s)")
+                        }
+                    } catch (_: InterruptedException) {
+                    }
+                }
+            }
+            try {
+                ch.connect(timeoutMs)
+                return ch
+            } catch (e: JSchException) {
+                if (e.message?.contains("channel is not opened") != true) throw e
+                val code = ch.exitStatus
+                last = if (code > 0) "the server refused it (${reasonName(code)})" else "no answer within ${timeoutMs / 1000}s"
+                try { ch.disconnect() } catch (_: Exception) {}
+                if (attempt < attempts) Thread.sleep(2000L * attempt)
+            } finally {
+                watcher?.interrupt()
+            }
+        }
+        throw ChannelOpenException("Couldn't open an SSH channel for $what: $last (tried $attempts times)")
+    }
 
     private fun newJSch(keyFile: File): JSch = JSch().apply { addIdentity(keyFile.absolutePath) }
 
@@ -52,19 +116,22 @@ object Ssh {
         return s
     }
 
-    fun exec(s: Session, cmd: String, timeoutMs: Long = 90_000): ExecResult {
-        val ch = s.openChannel("exec") as ChannelExec
-        ch.setCommand(cmd)
-        val err = ByteArrayOutputStream()
-        ch.setErrStream(err, true)
-        val ins = ch.inputStream
-        ch.connect(20_000)
+    fun exec(s: Session, cmd: String, timeoutMs: Long = 90_000, what: String = "a command"): ExecResult {
+        var err = ByteArrayOutputStream()
+        var ins: InputStream? = null
+        val ch = connectChannel<ChannelExec>(s, "exec", what) {
+            it.setCommand(cmd)
+            err = ByteArrayOutputStream()
+            it.setErrStream(err, true)
+            ins = it.inputStream
+        }
+        val input = ins!!
         try {
             val out = ByteArrayOutputStream()
             val buf = ByteArray(8192)
             val deadline = System.nanoTime() + timeoutMs * 1_000_000
             while (true) {
-                val n = ins.read(buf)
+                val n = input.read(buf)
                 if (n < 0) break
                 out.write(buf, 0, n)
                 if (System.nanoTime() > deadline) throw IOException("command timed out: $cmd")
@@ -91,13 +158,12 @@ object Ssh {
         private var outs: OutputStream? = null
 
         override fun connect(socket_factory: SocketFactory?, host: String?, port: Int, timeout: Int) {
-            val ch = via.openChannel("exec") as ChannelExec
-            ch.setCommand(command)
-            ch.setErrStream(LineOutputStream(stderrLine), true)
-            ins = ch.inputStream
-            outs = ch.outputStream
-            ch.connect(if (timeout > 0) timeout else 30_000)
-            channel = ch
+            channel = connectChannel<ChannelExec>(via, "exec", "the ProxyCommand ($command) on katana") {
+                it.setCommand(command)
+                it.setErrStream(LineOutputStream(stderrLine), true)
+                ins = it.inputStream
+                outs = it.outputStream
+            }
         }
 
         override fun getInputStream(): InputStream? = ins

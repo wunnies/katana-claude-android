@@ -12,8 +12,8 @@ android {
         minSdk = 26
         // 34 keeps the classic (non edge-to-edge) window so the keyboard resizes the terminal.
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     // A fixed signing key, so every build (Android Studio or GitHub Actions) can be

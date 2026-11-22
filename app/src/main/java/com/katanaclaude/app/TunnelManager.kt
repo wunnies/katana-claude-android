@@ -8,6 +8,7 @@ import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.JSchException
 import com.jcraft.jsch.Session
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -117,6 +118,7 @@ object TunnelManager {
 
     fun init(ctx: Context) {
         if (!::app.isInitialized) app = ctx.applicationContext
+        if (Ssh.slowLog == null) Ssh.slowLog = { log(it) }
     }
 
     fun isRunning(): Boolean = run?.let { !it.stopped && it.thread?.isAlive == true } ?: false
@@ -299,14 +301,15 @@ object TunnelManager {
         checkStop(r)
 
         // Reuse a tunnel-sshd job that is already queued or running, so there's never a duplicate.
-        val existing = Pbs.bestAlive(Pbs.parseQstat(exec(l, Pbs.bashLc("qstat")).out, p.jobName))
+        log("▶ qstat (looking for an existing ${p.jobName} job)")
+        val existing = Pbs.bestAlive(Pbs.parseQstat(exec(l, Pbs.bashLc("qstat"), what = "qstat on katana").out, p.jobName))
         if (existing != null) {
             jobId = existing.id
             log("Found existing ${p.jobName} job ${existing.id} (${Pbs.describe(existing.state)}), so I'm reusing it instead of submitting a new one.")
         } else {
             setState(State.SUBMITTING, "qsub ${p.jobScript}")
             log("▶ qsub ${p.jobScript}")
-            val sub = exec(l, Pbs.bashLc(Pbs.submitScript(p.jobScript)))
+            val sub = exec(l, Pbs.bashLc(Pbs.submitScript(p.jobScript)), what = "qsub on katana")
             sub.err.lineSequence().filter { it.isNotBlank() }.forEach { log("  $it") }
             val id = Pbs.parseQsubId(sub.out)
                 ?: throw Fatal("qsub failed (exit ${sub.code}): ${(sub.err + " " + sub.out).trim().take(400)}")
@@ -322,7 +325,7 @@ object TunnelManager {
         var lastComment: String? = null
         while (true) {
             checkStop(r)
-            val q = exec(l, Pbs.bashLc(Pbs.qstatScript(id)))
+            val q = exec(l, Pbs.bashLc(Pbs.qstatScript(id)), what = "qstat on katana")
             val (table, extra) = q.out.split("@@", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
             val j = Pbs.findById(Pbs.parseQstat(table, p.jobName), id)
             val el = elapsed(t0)
@@ -358,12 +361,15 @@ object TunnelManager {
         checkStop(r)
 
         // Step 5: a terminal on the job node running claude --resume (inside tmux)
-        val ch = js.openChannel("exec") as ChannelExec
-        ch.setPty(true)
-        ch.setPtyType("xterm-256color", cols, rows, 0, 0)
-        ch.setCommand(Pbs.remoteCommand(Pbs.launchScript(p.claudeCommand, p.useTmux, p.tmuxSession, p.tmuxMouse)))
-        val input = ch.inputStream
-        ch.connect(30_000)
+        log("▶ Starting the terminal on the job node")
+        var stream: InputStream? = null
+        val ch = Ssh.connectChannel<ChannelExec>(js, "exec", "the terminal on the job node") {
+            it.setPty(true)
+            it.setPtyType("xterm-256color", cols, rows, 0, 0)
+            it.setCommand(Pbs.remoteCommand(Pbs.launchScript(p.claudeCommand, p.useTmux, p.tmuxSession, p.tmuxMouse)))
+            stream = it.inputStream
+        }
+        val input = stream!!
         r.shell = ch
         r.shellOut = ch.outputStream
         ring.clear()
@@ -418,7 +424,8 @@ object TunnelManager {
             Regex("Connecting to ([^:\\s]+):").find(line)?.let { jobNode = it.groupValues[1] }
         }
 
-    fun exec(s: Session, cmd: String, timeoutMs: Long = 90_000): Ssh.ExecResult = Ssh.exec(s, cmd, timeoutMs)
+    fun exec(s: Session, cmd: String, timeoutMs: Long = 90_000, what: String = "a command on katana"): Ssh.ExecResult =
+        Ssh.exec(s, cmd, timeoutMs, what)
 
     private fun checkStop(r: Run) {
         if (r.stopped) throw Stopped()
