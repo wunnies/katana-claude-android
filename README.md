@@ -15,9 +15,10 @@ the connection, claude keeps running in tmux on the job node. The app reconnects
 
 ## Get the APK
 
-**Option A: GitHub Actions (no tools needed).** Push this folder to a private GitHub repo.
-The included workflow builds the APK on every push. Download it from
-*Actions → latest run → Artifacts → KatanaClaude-apk* (it's a zip containing `app-debug.apk`).
+**Option A: GitHub Actions (no tools needed).** Every push to `main` builds the APK and publishes
+it as the release **latest**. On your phone, open
+`https://github.com/wunnies/katana-claude-android/releases/latest` (signed in to GitHub) and tap
+**KatanaClaude.apk**. The same file is on the `apk` branch and in each run's artifacts.
 
 **Option B: Android Studio on your Mac.** Open this folder, wait for Gradle sync, then
 *Build → Build App Bundle(s) / APK(s) → Build APK(s)*. The APK is at

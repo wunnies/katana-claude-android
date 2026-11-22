@@ -2,7 +2,11 @@ name: Build APK
 
 on:
   push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -20,9 +24,25 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk KatanaClaude.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: KatanaClaude-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: KatanaClaude.apk
           if-no-files-found: error
+
+      # Release "latest": open https://github.com/<you>/katana-claude-android/releases/latest on the phone.
+      # Branch "apk": the same file, fetchable with plain git.
+      - name: Publish APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT=${GITHUB_SHA::7}
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest KatanaClaude.apk --title "Latest build ($SHORT)" \
+            --notes "Built from $SHORT. Download KatanaClaude.apk on your phone and open it to install."
+          mkdir -p /tmp/apkbranch && cp KatanaClaude.apk /tmp/apkbranch/ && cd /tmp/apkbranch
+          git init -q -b apk && git add KatanaClaude.apk
+          git -c user.name=github-actions -c user.email=actions@github.com commit -q -m "APK built from $SHORT"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" apk
