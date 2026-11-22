@@ -51,7 +51,8 @@ android {
         resources {
             excludes += setOf(
                 "META-INF/versions/**/module-info.class",
-                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
+                "META-INF/OSGI-INF/MANIFEST.MF",
                 "META-INF/LICENSE*",
                 "META-INF/NOTICE*",
                 "META-INF/DEPENDENCIES",
